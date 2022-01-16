@@ -1,0 +1,213 @@
+---
+- hosts: all
+  user: root
+  name: Vault, ldap, keycloak and nginx reverse proxy setup
+
+  tasks:
+
+  - name: "install Needed packages"
+    apt:
+      name: ['nginx', 'docker.io', 'unzip', 'certbot', 'python3-certbot-nginx', 'python3-docker', 'python3-pip']
+      state: latest
+  
+  - name: "apt-get update"
+    apt:
+      update_cache: yes
+      cache_valid_time: 3600
+
+  - name: docker-compose exists
+    stat: 
+      path: /usr/bin/docker-compose
+    register: docker_compose
+
+  - name: Install docker-compose via shell commands
+    shell:  |
+      curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose 
+      chmod +x /usr/local/bin/docker-compose
+      ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+    when: docker_compose.stat.exists == False
+
+  - name: delete default nginx site
+    file:
+      path: "/etc/nginx/sites-{{ item }}/default"
+      state: absent
+    with_items:
+      - enabled
+      - available
+    notify: restart nginx
+
+  - name: Do nginx configs exist in nginx enabled
+    stat: 
+      path: /etc/nginx/sites-enabled/{{ item }}
+    with_items: "{{ nginx_hosts }}"
+    register: "nginx_enabled"
+    
+  - name: Do nginx configs exist in nginx available
+    stat: 
+      path: /etc/nginx/sites-available/{{ item }}
+    with_items: "{{ nginx_hosts }}"
+    register: "nginx_available"
+
+  - name: copy nginx conf files
+    template:
+      src: "{{ item }}.j2"
+      dest: /etc/nginx/sites-available/{{ item }}
+      owner: root
+      group: root
+      mode: '0644'
+    when: "nginx_available.results[item.0].stat.exists == False"
+    with_indexed_items: "{{ nginx_hosts }}"
+
+  - name: Send proxy configurations
+    template:
+      src: "proxy.conf.j2"
+      dest: "/etc/nginx/snippets/proxy.conf"
+    with_items:
+      - keycloak
+      - ldap
+
+  - name: Set the proxy configs in nginx
+    lineinfile:
+      path: /etc/nginx/nginx.conf
+      regexp: 'include /etc/nginx/snippets/proxy.conf;'
+      line: '        include /etc/nginx/snippets/proxy.conf;'
+      insertbefore: '^\s*include \/etc\/nginx\/sites-enabled\/\*;'
+      state: present
+      firstmatch: yes
+    notify: restart nginx
+
+
+  - name: Create a symbolic link
+    file:
+      src: "/etc/nginx/sites-available/{{ item }}"
+      dest: "/etc/nginx/sites-enabled/{{ item }}"
+      state: link
+    when: "nginx_enabled.results[item.0].stat.exists == False"
+    with_indexed_items: "{{ nginx_hosts }}"
+    notify: restart nginx
+
+  - name: Do certbot certificates exist
+    stat: 
+      path: /etc/letsencrypt/live/{{ item }}
+    with_items: "{{ nginx_hosts }}"
+    register: "certificates"
+
+  - name: Issue certbot certificates
+    shell: certbot --nginx -d {{ item }} --email {{ email_account }} --agree-tos
+    when: "certificates.results[item.0].stat.exists == False"
+    with_indexed_items: "{{ nginx_hosts }}"
+    notify: restart nginx
+
+
+##### Vault setup ######
+
+  - name: Creating vault user group
+    group: 
+      name: "vault"
+    become: true
+  - name: Creating vault user
+    user:
+      name: "vault"
+      group: "vault"
+      system: yes
+      shell: "/sbin/nologin"
+      comment: "vault nologin User"
+      createhome: "no"
+      state: present
+  - name: Download vault packages
+    get_url:
+      url: "https://releases.hashicorp.com/vault/{{vault_version}}/vault_{{vault_version}}_linux_amd64.zip"
+      dest: /opt
+
+  - name: Does vault exist
+    stat: 
+      path: /usr/local/bin/vault
+    register: "vault_cmd"
+
+  - name: Unarchive vault binary
+    unarchive:
+      src: /opt/vault_{{vault_version}}_linux_amd64.zip
+      dest: /usr/local/bin
+      remote_src: yes
+    when: "vault_cmd.stat.exists == False"
+
+  - name: Create a symbolic link for vault command
+    file:
+      src: "/usr/local/bin/vault"
+      dest: "/usr/bin/vault"
+      state: link
+
+  - name: Setup vault autocomplete
+    shell:  |
+      vault -autocomplete-install
+    check_mode: no
+    ignore_errors: yes
+
+  - name: Copy systemd init file
+    template:
+      src: vault.service.j2
+      dest: /etc/systemd/system/vault.service
+      owner: root
+      group: root
+    notify: restart_vault
+    
+  - name: Create needed directories
+    file:
+      path: "{{ item.name }}"
+      state: directory
+      mode: "{{ item.mode }}"
+      recurse: yes
+    with_items:
+      - { name: '/etc/vault', mode: '0755' }
+      - { name: '/var/lib/vault/data', mode: '0755' }
+      - { name: '~/keycloak', mode: '0755' }
+      - { name: '~/ldap', mode: '0755' }
+      - { name: '/var/lib/openldap', mode: '0775' }
+
+  - name: Vault service configuration
+    template:
+      src: vault.hcl.j2
+      dest: "/etc/vault/vault.hcl"
+      owner: "vault"
+      group: "vault"
+    notify: restart_vault
+
+  ##### ldap and keyclock compose files setup #####
+
+  - name: Copy compose files
+    template:
+      src: "{{ item }}-compose.yml.j2"
+      dest: "~/{{ item }}/docker-compose.yml"
+    with_items:
+      - keycloak
+      - ldap
+
+  - pip: name=docker-compose
+
+  - name: Check for containers status
+    docker_container_info:
+      name: "{{ item }}"
+    with_items: 
+      - keycloak_mysql_1
+      - keycloak_keycloak_1
+      - ldap_openldap_1
+      - ldap_phpldapadmin_1
+    register: docker_containers
+
+  - name: Start compose files
+    community.general.docker_compose: 
+      project_src: ~/{{ item.invocation.module_args.name.split('_')[0] }}
+    when: item.exists == False
+    with_items: "{{ docker_containers.results }}"
+
+  handlers:
+    - name: restart nginx
+      service:
+        name: nginx
+        state: restarted
+    - name: restart_vault
+      service:
+        name: vault
+        state: restarted
+        enabled: yes
+        daemon_reload: yes

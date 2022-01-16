@@ -1,0 +1,27 @@
+version: '3.9'
+services:
+  mysql:
+    image: mysql:8.0.20
+    volumes:
+      - /var/lib/mysql:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: "{{ MYSQL_ROOT_PASSWORD }}"
+      MYSQL_DATABASE: keycloak
+      MYSQL_USER: keycloak
+      MYSQL_PASSWORD: "{{ MYSQL_PASSWORD }}"
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    environment:
+      DB_VENDOR: MYSQL
+      DB_PORT: 3306
+      DB_ADDR: mysql
+      DB_DATABASE: keycloak
+      DB_USER: keycloak
+      DB_PASSWORD: "{{ MYSQL_PASSWORD }}"
+      KEYCLOAK_USER: keycloak
+      KEYCLOAK_PASSWORD: "{{ KEYCLOAK_PASSWORD }}"
+      KEYCLOAK_FRONTEND_URL: "https://oidc.toudherebarry.com/auth"
+    ports:
+      - 8080:8080
+    depends_on:
+      - mysql

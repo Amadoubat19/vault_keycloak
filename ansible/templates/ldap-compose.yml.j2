@@ -1,0 +1,22 @@
+version: '3.9'
+services:
+  openldap:
+    image: docker.io/bitnami/openldap:2.5
+    ports:
+      - '1389:1389'
+      - '1636:1636'
+    environment:
+      - LDAP_ADMIN_USERNAME=admin
+      - LDAP_ADMIN_PASSWORD={{ LDAP_ADMIN_PASSWORD }}
+    volumes:
+      - '/var/lib/openldap:/bitnami/openldap'
+  phpldapadmin:
+    image: osixia/phpldapadmin:latest
+    container_name: phpldapadmin
+    environment:
+      PHPLDAPADMIN_LDAP_HOSTS: "openldap"
+      PHPLDAPADMIN_HTTPS: "false"
+    ports:
+      - "9090:80"
+    depends_on:
+      - openldap
