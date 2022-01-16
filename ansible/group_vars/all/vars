@@ -1,8 +1,8 @@
 vault_version: "1.9.2"
 nginx_hosts:
-    - chest.toudherebarry.com
-    - oidc.toudherebarry.com
-    - ldapadmin.toudherebarry.com
+    - __KEYCLOAK__URL__
+    - __VAULT_URL__
+    - __LDPADMIN_URL__
 
 ##### Vaulted vars #####
 # MYSQL_ROOT_PASSWORD: "xxx"
