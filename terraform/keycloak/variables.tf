@@ -24,7 +24,12 @@ variable "client_id" {
     description = "(optional) describe your variable"
 }
 
-variable "url" {
+variable "vault_url" {
+    type = string
+    description = "(optional) describe your variable"
+}
+
+variable "keycloak_url" {
     type = string
     description = "(optional) describe your variable"
 }
