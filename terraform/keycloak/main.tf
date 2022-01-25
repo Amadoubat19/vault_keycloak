@@ -59,7 +59,7 @@ resource "keycloak_openid_client" "openid_client" {
   direct_access_grants_enabled = true
   
   access_type         = "PUBLIC"
-  allowed_redirect_uris = [
+  valid_redirect_uris  = [
     format("https://%s/ui/vault/auth/oidc/oidc/callback", var.vault_url),
     format("https://%s/oidc/oidc/callback", var.vault_url),
   ]
