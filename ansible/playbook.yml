@@ -38,33 +38,30 @@
 
   - name: Do nginx configs exist in nginx enabled
     stat: 
-      path: /etc/nginx/sites-enabled/{{ item }}
-    with_items: "{{ nginx_hosts }}"
+      path: /etc/nginx/sites-enabled/{{ item.url }}
+    with_items: "{{ nginx }}"
     register: "nginx_enabled"
     
   - name: Do nginx configs exist in nginx available
     stat: 
-      path: /etc/nginx/sites-available/{{ item }}
-    with_items: "{{ nginx_hosts }}"
+      path: /etc/nginx/sites-available/{{ item.url }}
+    with_items: "{{ nginx }}"
     register: "nginx_available"
 
   - name: copy nginx conf files
     template:
-      src: "{{ item }}.j2"
-      dest: /etc/nginx/sites-available/{{ item }}
+      src: "nginx.conf.j2"
+      dest: /etc/nginx/sites-available/{{ item.url }}
       owner: root
       group: root
       mode: '0644'
     when: "nginx_available.results[item.0].stat.exists == False"
-    with_indexed_items: "{{ nginx_hosts }}"
+    with_indexed_items: "{{ nginx }}"
 
   - name: Send proxy configurations
     template:
       src: "proxy.conf.j2"
       dest: "/etc/nginx/snippets/proxy.conf"
-    with_items:
-      - keycloak
-      - ldap
 
   - name: Set the proxy configs in nginx
     lineinfile:
@@ -79,23 +76,23 @@
 
   - name: Create a symbolic link
     file:
-      src: "/etc/nginx/sites-available/{{ item }}"
-      dest: "/etc/nginx/sites-enabled/{{ item }}"
+      src: "/etc/nginx/sites-available/{{ item.url }}"
+      dest: "/etc/nginx/sites-enabled/{{ item.url }}"
       state: link
     when: "nginx_enabled.results[item.0].stat.exists == False"
-    with_indexed_items: "{{ nginx_hosts }}"
+    with_indexed_items: "{{ nginx }}"
     notify: restart nginx
 
   - name: Do certbot certificates exist
     stat: 
-      path: /etc/letsencrypt/live/{{ item }}
-    with_items: "{{ nginx_hosts }}"
+      path: /etc/letsencrypt/live/{{ item.url }}
+    with_items: "{{ nginx }}"
     register: "certificates"
 
   - name: Issue certbot certificates
-    shell: certbot --nginx -d {{ item }} --email {{ email_account }} --agree-tos
+    shell: certbot --nginx -d {{ item.url }} --email {{ email_account }} --agree-tos
     when: "certificates.results[item.0].stat.exists == False"
-    with_indexed_items: "{{ nginx_hosts }}"
+    with_indexed_items: "{{ nginx }}"
     notify: restart nginx
 
 

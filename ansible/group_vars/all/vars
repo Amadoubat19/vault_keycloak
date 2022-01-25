@@ -1,8 +1,14 @@
 vault_version: "1.9.2"
-nginx_hosts:
-    - __KEYCLOAK__URL__
-    - __VAULT_URL__
-    - __LDPADMIN_URL__
+nginx:
+    - url: oidc.example.com
+      port: 8080
+    - url: chest.example.com
+      port: 8200
+    - url: ldapadmin.example.com
+      port: 9090
+
+keycloak_url: oidc.example.com
+
 
 ##### Vaulted vars #####
 # MYSQL_ROOT_PASSWORD: "xxx"
