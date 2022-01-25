@@ -18,4 +18,6 @@ users = [
 username      = "__KEYCLOAK_ADMIN_USERNAME__"
 passwd      = "__KEYCLOAK_ADMIN_PASSWD__"
 client_id = "admin-cli"
-url           = "https://__KEYCLOAK_URL"
+
+vault_url = "vault.test.url"
+keycloak_url = "keycloak.test.url"

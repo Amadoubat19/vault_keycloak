@@ -16,14 +16,14 @@ provider "keycloak" {
   username      = var.username
   password      = var.passwd
   client_id = var.client_id
-  url           = var.url
+  url           = format("https://%s", var.keycloak_url)
 }
 
 provider "keycloaky" {
   username      = var.username
   password      = var.passwd
   client_id = var.client_id
-  url           = var.url
+  url           = format("https://%s", var.keycloak_url)
 }
 
 
@@ -59,9 +59,9 @@ resource "keycloak_openid_client" "openid_client" {
   direct_access_grants_enabled = true
   
   access_type         = "PUBLIC"
-  valid_redirect_uris = [
-    "https://__VAULT_URL__/ui/vault/auth/oidc/oidc/callback",    
-    "https://__VAULT_URL__/oidc/oidc/callback",
+  allowed_redirect_uris = [
+    format("https://%s/ui/vault/auth/oidc/oidc/callback", var.vault_url),
+    format("https://%s/oidc/oidc/callback", var.vault_url),
   ]
 
   login_theme = "keycloak"

@@ -1,6 +1,6 @@
 provider "vault" {
-  address = "https://__VAULT_URL"
-  token = "__VAULT_TOKEN__"
+  address = format("https://%s", var.vault_url)
+  token = var.vault_token
 }
 
 resource "vault_identity_oidc_key" "key" {
@@ -12,7 +12,7 @@ resource "vault_jwt_auth_backend" "oidc_backend" {
     description         = "Demonstration of the Terraform JWT auth backend"
     path                = "oidc"
     type                = "oidc"
-    oidc_discovery_url  = "https://__KEYCLOAK_URL__/auth/realms/vault"
+    oidc_discovery_url  = format("https://%s/auth/realms/vault", var.keycloak_url)
     default_role = "default"
     oidc_client_id      = "vault"
     oidc_client_secret  = "9SC0lmQSsuvN6EUK6sagJEdmREWiph58"
@@ -41,8 +41,8 @@ resource "vault_jwt_auth_backend_role" "default" {
   }
 
   allowed_redirect_uris = [
-    "https://__VAULT_URL/ui/vault/auth/oidc/oidc/callback",    
-    "https://__VAULT_URL/oidc/oidc/callback",
+    format("https://%s/ui/vault/auth/oidc/oidc/callback", var.vault_url),
+    format("https://%s/oidc/oidc/callback", var.vault_url),
   ]
   groups_claim = "/resource_access/vault/roles"
 }
@@ -108,4 +108,91 @@ resource "vault_identity_group_alias" "reader_group_alias" {
   name           = "reader"
   mount_accessor = vault_jwt_auth_backend.oidc_backend.accessor
   canonical_id   = vault_identity_group.reader_group.id
+}
+
+# resource "vault_audit" "file" {
+#   type = "file"
+
+#   options = {
+#     file_path = "/var/lib/vault/vault_audit.log"
+#   }
+# }
+
+# resource "vault_pki_secret_backend" "pki-tidi" {
+#   path        = "pki-tidi"
+# }
+
+# resource "vault_pki_secret_backend_role" "role" {
+#   backend          = vault_pki_secret_backend.domain_tidi.path
+#   name             = "domain_tidi"
+#   ttl              = 30000000
+#   max_ttl          = 30000000
+#   allowed_domains  = ["toudhere"]
+#   allow_subdomains = true
+# }
+
+resource "vault_policy" "nginx-secret" {
+  name = "nginx-secret"
+  policy = <<EOT
+    path "nginx-secret/*" {
+      capabilities = ["read"]
+    }
+  EOT
+}
+
+# resource "vault_policy" "cert-manager" {
+#   name = "cert-manager"
+
+#   policy = <<EOF
+#     path "pki-tidi/*" { 
+#       capabilities = ["read", "list"] 
+#     }
+#     path "pki-tidi/roles/domain_4as" { 
+#       capabilities = ["create", "update"] 
+#     }
+#     path "pki-tidi/sign/domain_4as"  { 
+#       capabilities = ["create", "update"]
+#     }
+#     path "pki-tidi/issue/domain_4as" { 
+#       capabilities = ["create"] 
+#     }
+#   EOF
+# }
+
+resource "vault_mount" "nginx-secret" {
+  path        = "nginx-secret"
+  type        = "kv-v2"
+}
+
+resource "vault_generic_secret" "nginx-secret-data" {
+  path = "nginx-secret/data"
+
+  data_json = <<EOT
+  {
+    "username":   "kernelPanic",
+    "passwd": "hahahaha"
+  }
+EOT
+}
+
+resource "vault_auth_backend" "kubernetes" {
+  type = "kubernetes"
+}
+
+resource "vault_kubernetes_auth_backend_config" "kube-vpn" {
+  backend                = vault_auth_backend.kubernetes.path
+  kubernetes_host        = "https://XXX:6443" # Kubernetes api server host and port
+  kubernetes_ca_cert     = file("../files/caKube.crt") # Kube ca certificate 
+  token_reviewer_jwt     = file("../files/kubernetes.key") # Token reviewer with auth-delegator
+  issuer                 = "https://kubernetes.default.svc.cluster.local"
+}
+
+resource "vault_kubernetes_auth_backend_role" "kube-vpn" {
+  backend                          = vault_auth_backend.kubernetes.path
+  role_name                        = "kube-vpn"
+  bound_service_account_names      = ["default", "vault-secret"]
+  bound_service_account_namespaces = ["default", "vault"]
+  token_ttl                        = 3600
+  token_policies                   = ["default", "nginx-secret"]
+  audience                         = null
 }
